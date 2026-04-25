@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KOHSP — Kenya One Health Surveillance Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-base:     #080c12;
+            --bg-surface:  #0d1320;
+            --bg-card:     #111827;
+            --bg-hover:    #1a2438;
+            --border:      #1e2d45;
+            --border-bright: #2a3f60;
+            --text-primary: #e8edf5;
+            --text-muted:   #6b7fa0;
+            --text-dim:     #3d5070;
+            --accent-green: #00e5a0;
+            --accent-green-dim: rgba(0,229,160,0.12);
+            --accent-blue:  #38bdf8;
+            --accent-red:   #f43f5e;
+            --accent-yellow: #fbbf24;
+            --accent-purple: #a78bfa;
+            --accent-orange: #fb923c;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Sora', sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            antialiased: true;
+        }
+
+        code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: var(--bg-surface); }
+        ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+        /* Map */
+        #map { height: 420px; width: 100%; border-radius: 8px; z-index: 1; }
+        .leaflet-popup-content-wrapper {
+            background: var(--bg-card) !important;
+            color: var(--text-primary) !important;
+            border: 1px solid var(--border-bright) !important;
+            border-radius: 8px !important;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+        }
+        .leaflet-popup-tip { background: var(--bg-card) !important; }
+        .leaflet-popup-close-button { color: var(--text-muted) !important; }
+        .leaflet-control-zoom a {
+            background: var(--bg-card) !important;
+            color: var(--text-primary) !important;
+            border-color: var(--border) !important;
+        }
+        .leaflet-bar { border-color: var(--border) !important; }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .card:hover { border-color: var(--border-bright); }
+
+        /* KPI Cards */
+        .kpi-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            transition: all 0.25s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+        }
+        .kpi-card.blue::before  { background: linear-gradient(90deg, var(--accent-blue), transparent); }
+        .kpi-card.red::before   { background: linear-gradient(90deg, var(--accent-red), transparent); }
+        .kpi-card.yellow::before { background: linear-gradient(90deg, var(--accent-yellow), transparent); }
+        .kpi-card.purple::before { background: linear-gradient(90deg, var(--accent-purple), transparent); }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); border-color: var(--border-bright); }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border);
+        }
+        .sidebar-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 20px;
+            font-size: 13px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+            border-radius: 0;
+            text-decoration: none;
+        }
+        .sidebar-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .sidebar-item.active {
+            background: var(--accent-green-dim);
+            color: var(--accent-green);
+            border-right: 3px solid var(--accent-green);
+        }
+        .sidebar-item.active i { color: var(--accent-green); }
+
+        /* Header */
+        .top-header {
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* Selects */
+        select {
+            background: var(--bg-hover);
+            border: 1px solid var(--border-bright);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 13px;
+            font-family: 'Sora', sans-serif;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7fa0' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            background-size: 16px;
+            padding-right: 28px;
+            cursor: pointer;
+        }
+        select:focus { outline: none; border-color: var(--accent-green); box-shadow: 0 0 0 2px rgba(0,229,160,0.1); }
+        select option { background: #1a2438; }
+
+        /* Alert items */
+        .alert-item {
+            border-radius: 8px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+            border-left: 3px solid;
+        }
+        .alert-item:hover { filter: brightness(1.15); }
+        .alert-item.critical { background: rgba(244,63,94,0.08); border-color: var(--accent-red); }
+        .alert-item.high     { background: rgba(251,191,36,0.08); border-color: var(--accent-yellow); }
+        .alert-item.medium   { background: rgba(56,189,248,0.08); border-color: var(--accent-blue); }
+
+        /* Badge */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .badge-red    { background: rgba(244,63,94,0.15);  color: #fb7185; border: 1px solid rgba(244,63,94,0.3); }
+        .badge-yellow { background: rgba(251,191,36,0.15); color: #fcd34d; border: 1px solid rgba(251,191,36,0.3); }
+        .badge-blue   { background: rgba(56,189,248,0.15); color: #7dd3fc; border: 1px solid rgba(56,189,248,0.3); }
+        .badge-green  { background: rgba(0,229,160,0.12);  color: var(--accent-green); border: 1px solid rgba(0,229,160,0.25); }
+        .badge-gray   { background: rgba(107,127,160,0.15); color: #94a3b8; border: 1px solid rgba(107,127,160,0.3); }
+        .badge-purple { background: rgba(167,139,250,0.15); color: #c4b5fd; border: 1px solid rgba(167,139,250,0.3); }
+        .badge-orange { background: rgba(251,146,60,0.15); color: #fdba74; border: 1px solid rgba(251,146,60,0.3); }
+
+        /* Table */
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .data-table thead tr { border-bottom: 1px solid var(--border-bright); }
+        .data-table thead th {
+            padding: 10px 14px;
+            text-align: left;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .data-table tbody tr {
+            border-bottom: 1px solid var(--border);
+            transition: background 0.1s;
+        }
+        .data-table tbody tr:hover { background: var(--bg-hover); }
+        .data-table td { padding: 11px 14px; color: var(--text-primary); }
+        .data-table td.mono-cell { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted); }
+
+        /* Pulse */
+        @keyframes pulse-dot {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(244,63,94,0.5); }
+            50% { box-shadow: 0 0 0 6px rgba(244,63,94,0); }
+        }
+        .pulse-dot { animation: pulse-dot 2s infinite; }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.75);
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .modal-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-bright);
+            border-radius: 16px;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.8);
+        }
+
+        /* Form inputs */
+        input[type="text"], input[type="date"], input[type="number"], textarea {
+            background: var(--bg-hover);
+            border: 1px solid var(--border-bright);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-family: 'Sora', sans-serif;
+            width: 100%;
+            transition: border-color 0.15s;
+        }
+        input:focus, textarea:focus { outline: none; border-color: var(--accent-green); }
+        input[type="checkbox"] { accent-color: var(--accent-green); }
+        label.field-label { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; display: block; }
+
+        /* Section label */
+        .section-label {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
+            padding: 0 20px;
+            margin-bottom: 6px;
+        }
+
+        /* Fade in */
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-up { animation: fadeUp 0.3s ease; }
+
+        /* Tabs */
+        .tab-btn {
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.15s;
+            color: var(--text-muted);
+        }
+        .tab-btn.active { background: var(--accent-green-dim); color: var(--accent-green); border-color: rgba(0,229,160,0.2); }
+        .tab-btn:hover:not(.active) { background: var(--bg-hover); color: var(--text-primary); }
+
+        /* Status dot */
+        .status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+        .status-dot.active    { background: var(--accent-red); }
+        .status-dot.monitoring { background: var(--accent-yellow); }
+        .status-dot.controlled { background: var(--accent-green); }
+        .status-dot.closed    { background: var(--text-dim); }
+
+        /* Map legend */
+        .map-legend {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+        }
+
+        /* Line list filters */
+        .filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-bright);
+            background: var(--bg-hover);
+            font-size: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .filter-chip.active { border-color: var(--accent-green); color: var(--accent-green); background: var(--accent-green-dim); }
+        .filter-chip:hover:not(.active) { color: var(--text-primary); }
+
+        /* Expand row */
+        .expand-row { background: var(--bg-hover) !important; }
+        .expand-row td { padding: 0; }
+        .expand-content { padding: 16px 20px; border-top: 1px solid var(--border); }
+
+        /* Green button */
+        .btn-primary {
+            background: var(--accent-green);
+            color: #080c12;
+            font-weight: 600;
+            font-size: 13px;
+            padding: 8px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.15s;
+            border: none;
+        }
+        .btn-primary:hover { opacity: 0.88; }
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border-bright);
+            font-size: 13px;
+            padding: 8px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-ghost:hover { color: var(--text-primary); border-color: var(--accent-green); }
+
+        /* Notification dot */
+        .notif-dot {
+            position: absolute;
+            top: 8px; right: 6px;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--accent-red);
+            border: 2px solid var(--bg-surface);
+        }
+    </style>
+</head>
+<body>
+
+<!-- ─── ROLE MODAL ─────────────────────────────────────────────────────────── -->
+<div id="roleModal" class="modal-overlay">
+    <div class="modal-box p-8 max-w-md w-full mx-4 fade-up">
+        <div class="text-center mb-8">
+            <div class="w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-4" style="background: var(--accent-green-dim); border: 1px solid rgba(0,229,160,0.25);">
+                <i class="fas fa-shield-virus text-2xl" style="color: var(--accent-green);"></i>
+            </div>
+            <h2 class="text-xl font-bold" style="color: var(--text-primary);">KOHSP Platform Access</h2>
+            <p class="text-sm mt-1" style="color: var(--text-muted);">Kenya One Health Surveillance Platform</p>
+            <div class="mt-2 inline-block px-3 py-1 rounded-full text-xs mono" style="background: var(--bg-hover); color: var(--accent-green); border: 1px solid var(--border-bright);">
+                SECURE SESSION · 2026
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            <button onclick="setRole('national')" class="w-full p-4 rounded-xl flex items-center gap-4 transition hover:scale-[1.01]" style="background: var(--bg-hover); border: 1px solid var(--border-bright);" onmouseover="this.style.borderColor='var(--accent-green)'" onmouseout="this.style.borderColor='var(--border-bright)'">
+                <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style="background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.2); color: var(--accent-blue);">
+                    <i class="fas fa-building"></i>
+                </div>
+                <div class="text-left">
+                    <div class="font-semibold text-sm" style="color: var(--text-primary);">National Command Center</div>
+                    <div class="text-xs mt-0.5" style="color: var(--text-muted);">ZDU · MOH · MALD · KWS Access</div>
+                </div>
+                <i class="fas fa-chevron-right ml-auto text-xs" style="color: var(--text-dim);"></i>
+            </button>
+
+            <button onclick="setRole('county')" class="w-full p-4 rounded-xl flex items-center gap-4 transition hover:scale-[1.01]" style="background: var(--bg-hover); border: 1px solid var(--border-bright);" onmouseover="this.style.borderColor='var(--accent-green)'" onmouseout="this.style.borderColor='var(--border-bright)'">
+                <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style="background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.2); color: var(--accent-purple);">
+                    <i class="fas fa-map-marker-alt"></i>
+                </div>
+                <div class="text-left">
+                    <div class="font-semibold text-sm" style="color: var(--text-primary);">County COHU</div>
+                    <div class="text-xs mt-0.5" style="color: var(--text-muted);">County Coordinator / Officer Access</div>
+                </div>
+                <i class="fas fa-chevron-right ml-auto text-xs" style="color: var(--text-dim);"></i>
+            </button>
+
+            <button onclick="setRole('subcounty')" class="w-full p-4 rounded-xl flex items-center gap-4 transition hover:scale-[1.01]" style="background: var(--bg-hover); border: 1px solid var(--border-bright);" onmouseover="this.style.borderColor='var(--accent-green)'" onmouseout="this.style.borderColor='var(--border-bright)'">
+                <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style="background: rgba(251,146,60,0.1); border: 1px solid rgba(251,146,60,0.2); color: var(--accent-orange);">
+                    <i class="fas fa-clinic-medical"></i>
+                </div>
+                <div class="text-left">
+                    <div class="font-semibold text-sm" style="color: var(--text-primary);">Sub-County / Facility</div>
+                    <div class="text-xs mt-0.5" style="color: var(--text-muted);">PHO · Veterinary Officer · Facility</div>
+                </div>
+                <i class="fas fa-chevron-right ml-auto text-xs" style="color: var(--text-dim);"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ─── MAIN APP ───────────────────────────────────────────────────────────── -->
+<div class="flex h-screen overflow-hidden" id="appContainer" style="display: none !important;">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar w-60 flex flex-col flex-shrink-0" id="sidebar">
+        <div class="p-5 border-b" style="border-color: var(--border);">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background: var(--accent-green-dim); border: 1px solid rgba(0,229,160,0.25);">
+                    <i class="fas fa-heartbeat text-sm" style="color: var(--accent-green);"></i>
+                </div>
+                <div>
+                    <div class="font-bold text-sm tracking-wide" style="color: var(--text-primary);">KOHSP</div>
+                    <div class="text-xs" style="color: var(--text-dim); font-family: 'JetBrains Mono'; font-size: 10px;">ONE HEALTH KENYA</div>
+                </div>
+            </div>
+        </div>
+
+        <nav class="flex-1 overflow-y-auto py-3">
+            <div class="section-label mt-2 mb-2">Main Menu</div>
+
+            <a href="#" class="sidebar-item active" onclick="switchView('dashboard', event)">
+                <i class="fas fa-chart-line w-4 text-center"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="switchView('cases', event)">
+                <i class="fas fa-clipboard-list w-4 text-center"></i>
+                <span>Case Investigation</span>
+                <span class="ml-auto text-xs px-2 py-0.5 rounded-full mono" style="background: rgba(244,63,94,0.15); color: var(--accent-red); border: 1px solid rgba(244,63,94,0.25);" id="pendingCases">3</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="switchView('alerts', event)">
+                <i class="fas fa-bell w-4 text-center"></i>
+                <span>Alerts &amp; Response</span>
+                <span class="ml-auto text-xs px-2 py-0.5 rounded-full mono" style="background: rgba(251,191,36,0.15); color: var(--accent-yellow); border: 1px solid rgba(251,191,36,0.25);" id="alertCount">2</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="switchView('analytics', event)">
+                <i class="fas fa-chart-pie w-4 text-center"></i>
+                <span>Analytics</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="switchView('linelist', event)">
+                <i class="fas fa-table w-4 text-center"></i>
+                <span>Line List</span>
+            </a>
+
+            <div class="section-label mt-5 mb-2">Data Entry</div>
+
+            <a href="#" class="sidebar-item" onclick="openModal('newCase')">
+                <i class="fas fa-plus-circle w-4 text-center"></i>
+                <span>New Case Report</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="openModal('newAlert')">
+                <i class="fas fa-exclamation-triangle w-4 text-center"></i>
+                <span>Send Alert</span>
+            </a>
+
+            <div class="section-label mt-5 mb-2">Settings</div>
+
+            <a href="#" class="sidebar-item" onclick="location.reload()">
+                <i class="fas fa-exchange-alt w-4 text-center"></i>
+                <span>Switch Role</span>
+            </a>
+        </nav>
+
+        <div class="p-4 border-t" style="border-color: var(--border);">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background: var(--bg-hover); border: 1px solid var(--border-bright);">
+                    <i class="fas fa-user text-xs" style="color: var(--text-muted);"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-xs font-semibold truncate" style="color: var(--text-primary);" id="userName">Dr. Kimani</p>
+                    <p class="text-xs truncate" style="color: var(--text-muted); font-size: 10px;" id="userRole">National Coordinator</p>
+                </div>
+                <div class="w-2 h-2 rounded-full flex-shrink-0" style="background: var(--accent-green); box-shadow: 0 0 6px rgba(0,229,160,0.5);"></div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 flex flex-col overflow-hidden" style="background: var(--bg-base);">
+
+        <!-- TOP HEADER -->
+        <header class="top-header px-6 py-3 flex items-center justify-between flex-shrink-0">
+            <div>
+                <h2 class="text-base font-bold" style="color: var(--text-primary);" id="pageTitle">National Command Center</h2>
+                <p class="text-xs mt-0.5" style="color: var(--text-muted);" id="currentDate">Saturday, April 25, 2026</p>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div>
+                    <div class="text-xs mb-1" style="color: var(--text-dim);">Priority Disease</div>
+                    <select id="diseaseSelector" onchange="updateDashboardByDisease(this.value)" style="width: 190px;">
+                        <option value="all">All Diseases</option>
+                        <option value="rvf" selected>Rift Valley Fever (RVF)</option>
+                        <option value="rabies">Rabies</option>
+                        <option value="anthrax">Anthrax</option>
+                        <option value="brucellosis">Brucellosis</option>
+                        <option value="q_fever">Q Fever</option>
+                        <option value="leishmaniasis">Leishmaniasis</option>
+                        <option value="trypanosomiasis">Trypanosomiasis</option>
+                        <option value="cchf">Crimean-Congo HF</option>
+                        <option value="influenza">Avian Influenza</option>
+                    </select>
+                </div>
+                <div>
+                    <div class="text-xs mb-1" style="color: var(--text-dim);">Period</div>
+                    <select id="monthSelector" onchange="updateDashboardByMonth(this.value)" style="width: 148px;">
+                        <option value="current">Current Month</option>
+                        <option value="january">January</option>
+                        <option value="february" selected>February</option>
+                        <option value="march">March</option>
+                        <option value="april">April</option>
+                        <option value="may">May</option>
+                        <option value="q1">Q1 (Jan–Mar)</option>
+                        <option value="q2">Q2 (Apr–Jun)</option>
+                        <option value="ytd">Year to Date</option>
+                    </select>
+                </div>
+                <div id="countySelectorWrap">
+                    <div class="text-xs mb-1" style="color: var(--text-dim);">Region</div>
+                    <select id="countySelector" onchange="changeCounty(this.value)" style="width: 148px;">
+                        <option value="national">All Counties</option>
+                        <option value="nakuru">Nakuru County</option>
+                        <option value="kajiado">Kajiado County</option>
+                        <option value="turkana">Turkana County</option>
+                        <option value="nairobi">Nairobi County</option>
+                        <option value="mombasa">Mombasa County</option>
+                        <option value="kisumu">Kisumu County</option>
+                        <option value="garissa">Garissa County</option>
+                        <option value="isiolo">Isiolo County</option>
+                        <option value="marsabit">Marsabit County</option>
+                    </select>
+                </div>
+
+                <button class="relative p-2 rounded-lg transition mt-4" style="color: var(--text-muted);" onclick="showNotifications()" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
+                    <i class="fas fa-bell text-lg"></i>
+                    <span class="notif-dot pulse-dot"></span>
+                </button>
+            </div>
+        </header>
+
+        <!-- CONTENT AREA -->
+        <div class="flex-1 overflow-y-auto p-5" id="mainContent">
+
+            <!-- DASHBOARD VIEW -->
+            <div id="view-dashboard" class="fade-up">
+
+                <!-- Filter bar -->
+                <div class="flex items-center gap-2 mb-5 text-xs" style="color: var(--text-muted);">
+                    <i class="fas fa-filter" style="color: var(--accent-green);"></i>
+                    <span>Showing:</span>
+                    <span id="activeFilters">
+                        <span class="badge badge-red">RVF</span>
+                        <span class="badge badge-blue ml-1">February 2026</span>
+                        <span class="badge badge-purple ml-1">All Counties</span>
+                    </span>
+                    <button onclick="resetFilters()" class="ml-2 text-xs hover:underline" style="color: var(--accent-green);">Reset</button>
+                </div>
+
+                <!-- KPI Row -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+                    <div class="kpi-card blue p-5">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-xs" style="color: var(--text-muted);">Human Cases (Week)</p>
+                                <h3 class="text-3xl font-bold mt-1 mono" style="color: var(--text-primary);" id="humanCases">127</h3>
+                                <p class="text-xs mt-1 flex items-center gap-1" style="color: #4ade80;">
+                                    <i class="fas fa-arrow-up text-xs"></i> 23% vs last week
+                                </p>
+                            </div>
+                            <div class="p-2.5 rounded-lg" style="background: rgba(56,189,248,0.1); color: var(--accent-blue);">
+                                <i class="fas fa-user-injured"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card red p-5">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-xs" style="color: var(--text-muted);">Animal Cases (Week)</p>
+                                <h3 class="text-3xl font-bold mt-1 mono" style="color: var(--text-primary);" id="animalCases">456</h3>
+                                <p class="text-xs mt-1 flex items-center gap-1" style="color: #4ade80;">
+                                    <i class="fas fa-arrow-up text-xs"></i> 12% vs last week
+                                </p>
+                            </div>
+                            <div class="p-2.5 rounded-lg" style="background: rgba(244,63,94,0.1); color: var(--accent-red);">
+                                <i class="fas fa-cow"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card yellow p-5">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-xs" style="color: var(--text-muted);">Avg Response Time</p>
+                                <h3 class="text-3xl font-bold mt-1 mono" style="color: var(--text-primary);" id="responseTime">18h</h3>
+                                <p class="text-xs mt-1 flex items-center gap-1" style="color: #4ade80;">
+                                    <i class="fas fa-arrow-down text-xs"></i> 5 hrs improvement
+                                </p>
+                            </div>
+                            <div class="p-2.5 rounded-lg" style="background: rgba(251,191,36,0.1); color: var(--accent-yellow);">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card purple p-5">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-xs" style="color: var(--text-muted);">Active Alerts</p>
+                                <h3 class="text-3xl font-bold mt-1 mono" style="color: var(--text-primary);" id="activeAlerts">5</h3>
+                                <p class="text-xs mt-1 flex items-center gap-1" style="color: var(--accent-red);">
+                                    <i class="fas fa-exclamation-circle text-xs"></i> 2 require action
+                                </p>
+                            </div>
+                            <div class="p-2.5 rounded-lg" style="background: rgba(167,139,250,0.1); color: var(--accent-purple);">
+                                <i class="fas fa-bell"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Map + Alerts Row -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
+
+                    <!-- MAP -->
+                    <div class="card p-5 lg:col-span-2">
+                        <div class="flex justify-between items-center mb-4">
+                            <div>
+                                <h3 class="font-bold text-sm" style="color: var(--text-primary);">Geographic Distribution</h3>
+                                <p class="text-xs mt-0.5" style="color: var(--text-muted);">Active outbreak & surveillance sites — Kenya</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="badge badge-red"><i class="fas fa-circle text-xs mr-1"></i>Outbreak</span>
+                                <span class="badge badge-yellow"><i class="fas fa-circle text-xs mr-1"></i>Cluster</span>
+                                <span class="badge badge-blue"><i class="fas fa-circle text-xs mr-1"></i>Sporadic</span>
+                                <span class="badge badge-green"><i class="fas fa-circle text-xs mr-1"></i>Surveillance</span>
+                            </div>
+                        </div>
+                        <div id="map"></div>
+                        <!-- Map legend -->
+                        <div class="mt-3 flex items-center gap-4 text-xs" style="color: var(--text-muted);">
+                            <span><i class="fas fa-info-circle mr-1" style="color: var(--accent-blue);"></i>Click markers for case details</span>
+                            <span class="ml-auto">Tiles: CartoDB Dark Matter</span>
+                        </div>
+                    </div>
+
+                    <!-- ALERTS PANEL -->
+                    <div class="card p-5 flex flex-col">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-bold text-sm" style="color: var(--text-primary);">Active Alerts</h3>
+                            <span class="badge badge-red">5 OPEN</span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto space-y-2" id="alertsList">
+
+                            <div class="alert-item critical" onclick="showAlertDetail('rvf')">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="badge badge-red">CRITICAL</span>
+                                    <span class="text-xs" style="color: var(--text-dim); font-family: 'JetBrains Mono'; font-size: 10px;">2h ago</span>
+                                </div>
+                                <div class="font-semibold text-sm mb-1" style="color: var(--text-primary);">RVF Outbreak — Turkana Central</div>
+                                <div class="text-xs mb-2" style="color: var(--text-muted);">12 human cases, 2 deaths · 45 livestock deaths</div>
+                                <div class="flex gap-3 text-xs" style="color: #fb7185;">
+                                    <span><i class="fas fa-map-marker-alt mr-1"></i>Turkana</span>
+                                    <span><i class="fas fa-users mr-1"></i>Response Dispatched</span>
+                                </div>
+                            </div>
+
+                            <div class="alert-item high" onclick="showAlertDetail('rabies')">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="badge badge-yellow">HIGH</span>
+                                    <span class="text-xs" style="color: var(--text-dim); font-family: 'JetBrains Mono'; font-size: 10px;">5h ago</span>
+                                </div>
+                                <div class="font-semibold text-sm mb-1" style="color: var(--text-primary);">Rabies Cluster — Nairobi East</div>
+                                <div class="text-xs mb-2" style="color: var(--text-muted);">5 dog bite cases, informal settlement</div>
+                                <div class="flex gap-3 text-xs" style="color: #fcd34d;">
+                                    <span><i class="fas fa-map-marker-alt mr-1"></i>Nairobi</span>
+                                    <span><i class="fas fa-clock mr-1"></i>Monitoring</span>
+                                </div>
+                            </div>
+
+                            <div class="alert-item medium">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="badge badge-blue">MEDIUM</span>
+                                    <span class="text-xs" style="color: var(--text-dim); font-family: 'JetBrains Mono'; font-size: 10px;">1d ago</span>
+                                </div>
+                                <div class="font-semibold text-sm mb-1" style="color: var(--text-primary);">Anthrax — Nakuru North</div>
+                                <div class="text-xs mb-2" style="color: var(--text-muted);">Single human cutaneous case · 3 cattle deaths</div>
+                                <div class="flex gap-3 text-xs" style="color: #7dd3fc;">
+                                    <span><i class="fas fa-check-circle mr-1"></i>Controlled</span>
+                                </div>
+                            </div>
+
+                            <div class="alert-item medium">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="badge badge-purple">WATCH</span>
+                                    <span class="text-xs" style="color: var(--text-dim); font-family: 'JetBrains Mono'; font-size: 10px;">2d ago</span>
+                                </div>
+                                <div class="font-semibold text-sm mb-1" style="color: var(--text-primary);">Brucellosis — Kajiado</div>
+                                <div class="text-xs mb-2" style="color: var(--text-muted);">Lab-confirmed, pastoral community</div>
+                                <div class="flex gap-3 text-xs" style="color: #c4b5fd;">
+                                    <span><i class="fas fa-vial mr-1"></i>Lab Confirmed</span>
+                                </div>
+                            </div>
+
+                        </div>
+                        <button class="btn-ghost mt-3 w-full text-xs">View All Alerts</button>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+                    <div class="card p-5">
+                        <h3 class="font-bold text-sm mb-4" style="color: var(--text-primary);">Epidemic Curve — Priority Zoonoses (6 Weeks)</h3>
+                        <canvas id="epiCurveChart" height="200"></canvas>
+                    </div>
+                    <div class="card p-5">
+                        <h3 class="font-bold text-sm mb-4" style="color: var(--text-primary);">Case Distribution by Sector</h3>
+                        <div class="h-52 flex items-center justify-center">
+                            <canvas id="sectorChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Investigations Table -->
+                <div class="card p-5 mb-5">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-sm" style="color: var(--text-primary);">Recent Investigations</h3>
+                        <button class="text-xs hover:underline" style="color: var(--accent-green);">Export CSV</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Case ID</th>
+                                    <th>Date</th>
+                                    <th>Disease</th>
+                                    <th>Location</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="mono-cell">KOHSP-H-2026-001</td>
+                                    <td class="mono-cell">11/02/2026</td>
+                                    <td><span class="badge badge-red">RVF</span></td>
+                                    <td>Turkana Central</td>
+                                    <td><span class="flex items-center gap-2"><span class="status-dot active"></span> Active</span></td>
+                                    <td><button class="text-xs hover:underline" style="color: var(--accent-blue);">View</button></td>
+                                </tr>
+                                <tr>
+                                    <td class="mono-cell">KOHSP-H-2026-002</td>
+                                    <td class="mono-cell">10/02/2026</td>
+                                    <td><span class="badge badge-yellow">Rabies</span></td>
+                                    <td>Nairobi East</td>
+                                    <td><span class="flex items-center gap-2"><span class="status-dot monitoring"></span> Monitoring</span></td>
+                                    <td><button class="text-xs hover:underline" style="color: var(--accent-blue);">View</button></td>
+                                </tr>
+                                <tr>
+                                    <td class="mono-cell">KOHSP-A-2026-045</td>
+                                    <td class="mono-cell">09/02/2026</td>
+                                    <td><span class="badge badge-gray">Anthrax</span></td>
+                                    <td>Nakuru North</td>
+                                    <td><span class="flex items-center gap-2"><span class="status-dot controlled"></span> Controlled</span></td>
+                                    <td><button class="text-xs hover:underline" style="color: var(--accent-blue);">View</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div><!-- /view-dashboard -->
+
+            <!-- LINE LIST VIEW -->
+            <div id="view-linelist" class="fade-up" style="display:none;">
+                <div class="flex justify-between items-center mb-5">
+                    <div>
+                        <h3 class="font-bold text-base" style="color: var(--text-primary);">Case Line List</h3>
+                        <p class="text-xs mt-1" style="color: var(--text-muted);">Individual case-level surveillance data · Click row to expand details</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="btn-ghost text-xs" onclick="exportLineList()"><i class="fas fa-download mr-1"></i>Export CSV</button>
+                        <button class="btn-primary text-xs" onclick="openModal('newCase')"><i class="fas fa-plus mr-1"></i>Add Case</button>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="card p-4 mb-4">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <span class="text-xs" style="color: var(--text-muted);">Filter:</span>
+                        <button class="filter-chip active" onclick="filterLL('all', this)">All Cases</button>
+                        <button class="filter-chip" onclick="filterLL('human', this)">Human</button>
+                        <button class="filter-chip" onclick="filterLL('animal', this)">Animal</button>
+                        <button class="filter-chip" onclick="filterLL('wildlife', this)">Wildlife</button>
+                        <div class="border-l h-5 mx-1" style="border-color: var(--border-bright);"></div>
+                        <button class="filter-chip" onclick="filterLL('active', this)">Active</button>
+                        <button class="filter-chip" onclick="filterLL('monitoring', this)">Monitoring</button>
+                        <button class="filter-chip" onclick="filterLL('controlled', this)">Controlled</button>
+                        <div class="ml-auto">
+                            <input type="text" id="llSearch" placeholder="Search case ID, location…" style="width: 220px; padding: 6px 10px; font-size: 12px;" oninput="searchLL(this.value)">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary bar -->
+                <div class="grid grid-cols-4 gap-3 mb-4">
+                    <div class="card p-3 text-center">
+                        <div class="mono text-lg font-bold" style="color: var(--accent-red);" id="ll-total">24</div>
+                        <div class="text-xs mt-0.5" style="color: var(--text-muted);">Total Cases</div>
+                    </div>
+                    <div class="card p-3 text-center">
+                        <div class="mono text-lg font-bold" style="color: var(--accent-blue);" id="ll-human">9</div>
+                        <div class="text-xs mt-0.5" style="color: var(--text-muted);">Human</div>
+                    </div>
+                    <div class="card p-3 text-center">
+                        <div class="mono text-lg font-bold" style="color: var(--accent-yellow);" id="ll-animal">12</div>
+                        <div class="text-xs mt-0.5" style="color: var(--text-muted);">Animal</div>
+                    </div>
+                    <div class="card p-3 text-center">
+                        <div class="mono text-lg font-bold" style="color: var(--accent-green);" id="ll-cfr">4.2%</div>
+                        <div class="text-xs mt-0.5" style="color: var(--text-muted);">CFR</div>
+                    </div>
+                </div>
+
+                <!-- Line List Table -->
+                <div class="card overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="data-table" id="lineListTable">
+                            <thead>
+                                <tr>
+                                    <th>Case ID</th>
+                                    <th>Date Reported</th>
+                                    <th>Date Onset</th>
+                                    <th>Case Type</th>
+                                    <th>Disease</th>
+                                    <th>Age/Sex</th>
+                                    <th>County</th>
+                                    <th>Sub-County</th>
+                                    <th>Classification</th>
+                                    <th>Status</th>
+                                    <th>Outcome</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="lineListBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="p-4 flex items-center justify-between border-t" style="border-color: var(--border);">
+                        <span class="text-xs" style="color: var(--text-muted);">Showing <span id="ll-showing">24</span> of <span id="ll-total-count">24</span> records</span>
+                        <div class="flex gap-2">
+                            <button class="btn-ghost text-xs px-3 py-1.5">← Prev</button>
+                            <button class="btn-ghost text-xs px-3 py-1.5">Next →</button>
+                        </div>
+                    </div>
+                </div>
+            </div><!-- /view-linelist -->
+
+        </div><!-- /mainContent -->
+    </main>
+</div>
+
+<!-- NEW CASE MODAL -->
+<div id="newCaseModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box max-w-3xl w-full mx-4 max-h-screen overflow-y-auto">
+        <div class="sticky top-0 px-6 py-4 flex justify-between items-center border-b" style="border-color: var(--border); background: var(--bg-card);">
+            <div>
+                <h3 class="font-bold text-sm" style="color: var(--text-primary);">New Zoonotic Case Investigation</h3>
+                <p class="text-xs mt-0.5" style="color: var(--text-muted);">KOHSP — Case Notification Form</p>
+            </div>
+            <button onclick="closeModal('newCase')" style="color: var(--text-muted);" class="hover:text-white transition">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <form class="p-6 space-y-5" onsubmit="submitCase(event)">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="field-label">Case Type</label>
+                    <select class="w-full">
+                        <option>Human Case</option>
+                        <option>Animal Case</option>
+                        <option>Wildlife Mortality</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Suspected Disease</label>
+                    <select class="w-full">
+                        <option>Rift Valley Fever (RVF)</option>
+                        <option>Rabies</option>
+                        <option>Anthrax</option>
+                        <option>Brucellosis</option>
+                        <option>Q Fever</option>
+                        <option>Unknown/Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">County</label>
+                    <select class="w-full">
+                        <option>Nakuru</option><option>Turkana</option><option>Nairobi</option>
+                        <option>Kajiado</option><option>Mombasa</option><option>Kisumu</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Date of Onset</label>
+                    <input type="date">
+                </div>
+            </div>
+
+            <div>
+                <label class="field-label">Exposure History</label>
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                    <label class="flex items-center gap-2 text-xs cursor-pointer" style="color: var(--text-muted);">
+                        <input type="checkbox"> Animal contact / bite
+                    </label>
+                    <label class="flex items-center gap-2 text-xs cursor-pointer" style="color: var(--text-muted);">
+                        <input type="checkbox"> Raw milk / meat consumption
+                    </label>
+                    <label class="flex items-center gap-2 text-xs cursor-pointer" style="color: var(--text-muted);">
+                        <input type="checkbox"> Contact with wildlife
+                    </label>
+                    <label class="flex items-center gap-2 text-xs cursor-pointer" style="color: var(--text-muted);">
+                        <input type="checkbox"> Slaughtering / butchering
+                    </label>
+                    <label class="flex items-center gap-2 text-xs cursor-pointer" style="color: var(--text-muted);">
+                        <input type="checkbox"> Travel to endemic area
+                    </label>
+                    <label class="flex items-center gap-2 text-xs cursor-pointer" style="color: var(--text-muted);">
+                        <input type="checkbox"> Tick / insect bite
+                    </label>
+                </div>
+            </div>
+
+            <div>
+                <label class="field-label">Clinical Notes</label>
+                <textarea rows="3" placeholder="Describe symptoms, lab findings, clinical course…"></textarea>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t" style="border-color: var(--border);">
+                <button type="button" onclick="closeModal('newCase')" class="btn-ghost">Cancel</button>
+                <button type="submit" class="btn-primary">Submit Report</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // ── DATA ──────────────────────────────────────────────────────────────────
+    let currentRole = 'national', currentCounty = 'national', currentDisease = 'rvf', currentMonth = 'february';
+    let map, epiChart, sectorChart;
+
+    const diseaseData = {
+        rvf:            { name: 'Rift Valley Fever', color: 'red',    humanCases: 127, animalCases: 456, alerts: 5 },
+        rabies:         { name: 'Rabies',            color: 'yellow', humanCases: 45,  animalCases: 89,  alerts: 3 },
+        anthrax:        { name: 'Anthrax',           color: 'gray',   humanCases: 12,  animalCases: 34,  alerts: 1 },
+        brucellosis:    { name: 'Brucellosis',       color: 'blue',   humanCases: 67,  animalCases: 123, alerts: 2 },
+        q_fever:        { name: 'Q Fever',           color: 'orange', humanCases: 23,  animalCases: 45,  alerts: 1 },
+        leishmaniasis:  { name: 'Leishmaniasis',     color: 'purple', humanCases: 34,  animalCases: 12,  alerts: 0 },
+        trypanosomiasis:{ name: 'Trypanosomiasis',   color: 'indigo', humanCases: 15,  animalCases: 67,  alerts: 1 },
+        cchf:           { name: 'CCHF',              color: 'pink',   humanCases: 8,   animalCases: 23,  alerts: 2 },
+        influenza:      { name: 'Avian Influenza',   color: 'teal',   humanCases: 5,   animalCases: 234, alerts: 3 },
+        all:            { name: 'All Diseases',      color: 'green',  humanCases: 334, animalCases: 1083,alerts: 8 }
+    };
+
+    const monthlyData = {
+        january:{name:'January',multiplier:0.8}, february:{name:'February',multiplier:1.0},
+        march:{name:'March',multiplier:1.2},     april:{name:'April',multiplier:1.1},
+        may:{name:'May',multiplier:0.9},         q1:{name:'Q1',multiplier:3.0},
+        q2:{name:'Q2',multiplier:2.7},           ytd:{name:'YTD',multiplier:12.0},
+        current:{name:'Current Month',multiplier:1.0}
+    };
+
+    const countyData = {
+        nakuru:   { name:'Nakuru',   humanCases:23, animalCases:67,  alerts:1, lat:-0.3031, lng:36.0800 },
+        turkana:  { name:'Turkana',  humanCases:45, animalCases:123, alerts:2, lat:3.0300,  lng:35.9000 },
+        kajiado:  { name:'Kajiado',  humanCases:12, animalCases:89,  alerts:0, lat:-2.0981, lng:36.7819 },
+        nairobi:  { name:'Nairobi',  humanCases:34, animalCases:12,  alerts:1, lat:-1.2921, lng:36.8219 },
+        mombasa:  { name:'Mombasa',  humanCases:18, animalCases:34,  alerts:1, lat:-4.0435, lng:39.6682 },
+        kisumu:   { name:'Kisumu',   humanCases:29, animalCases:56,  alerts:1, lat:-0.1022, lng:34.7617 },
+        garissa:  { name:'Garissa',  humanCases:15, animalCases:78,  alerts:2, lat:-0.4530, lng:39.6460 },
+        isiolo:   { name:'Isiolo',   humanCases:22, animalCases:89,  alerts:1, lat:0.3546,  lng:37.5820 },
+        marsabit: { name:'Marsabit', humanCases:8,  animalCases:45,  alerts:1, lat:2.3395,  lng:37.9890 }
+    };
+
+    // ── LINE LIST DATA ────────────────────────────────────────────────────────
+    const lineListData = [
+        { id:'KOHSP-H-2026-001', reported:'11/02/2026', onset:'09/02/2026', type:'Human',   disease:'RVF',          ageSex:'34M', county:'Turkana', subcounty:'Turkana Central', classification:'Confirmed', status:'active',     outcome:'Hospitalised' },
+        { id:'KOHSP-H-2026-002', reported:'10/02/2026', onset:'08/02/2026', type:'Human',   disease:'Rabies',        ageSex:'8F',  county:'Nairobi',  subcounty:'Embakasi East',  classification:'Probable',  status:'monitoring', outcome:'PEP Ongoing' },
+        { id:'KOHSP-A-2026-045', reported:'09/02/2026', onset:'07/02/2026', type:'Animal',  disease:'Anthrax',       ageSex:'Cattle', county:'Nakuru', subcounty:'Nakuru North',  classification:'Confirmed', status:'controlled', outcome:'3 Dead/Disposed' },
+        { id:'KOHSP-H-2026-003', reported:'08/02/2026', onset:'06/02/2026', type:'Human',   disease:'Brucellosis',   ageSex:'52M', county:'Kajiado', subcounty:'Kajiado Central', classification:'Confirmed', status:'monitoring', outcome:'Outpatient Tx' },
+        { id:'KOHSP-W-2026-007', reported:'08/02/2026', onset:'07/02/2026', type:'Wildlife',disease:'Anthrax',       ageSex:'Hippo', county:'Kisumu', subcounty:'Seme',           classification:'Suspected', status:'controlled', outcome:'2 Carcasses' },
+        { id:'KOHSP-H-2026-004', reported:'07/02/2026', onset:'05/02/2026', type:'Human',   disease:'RVF',          ageSex:'29F', county:'Turkana', subcounty:'Loima',          classification:'Confirmed', status:'active',     outcome:'ICU' },
+        { id:'KOHSP-H-2026-005', reported:'07/02/2026', onset:'04/02/2026', type:'Human',   disease:'Leishmaniasis', ageSex:'17M', county:'Marsabit', subcounty:'Saku',          classification:'Confirmed', status:'monitoring', outcome:'Treated' },
+        { id:'KOHSP-A-2026-046', reported:'06/02/2026', onset:'05/02/2026', type:'Animal',  disease:'RVF',          ageSex:'Goat', county:'Garissa', subcounty:'Garissa Town',   classification:'Confirmed', status:'active',     outcome:'12 Dead' },
+        { id:'KOHSP-H-2026-006', reported:'06/02/2026', onset:'03/02/2026', type:'Human',   disease:'CCHF',          ageSex:'41M', county:'Isiolo',  subcounty:'Garbatulla',     classification:'Suspected', status:'monitoring', outcome:'Hospitalised' },
+        { id:'KOHSP-A-2026-047', reported:'05/02/2026', onset:'04/02/2026', type:'Animal',  disease:'Brucellosis',   ageSex:'Cattle', county:'Nakuru', subcounty:'Naivasha',     classification:'Confirmed', status:'controlled', outcome:'Quarantine' },
+        { id:'KOHSP-H-2026-007', reported:'05/02/2026', onset:'02/02/2026', type:'Human',   disease:'Rabies',        ageSex:'6M',  county:'Mombasa', subcounty:'Likoni',         classification:'Confirmed', status:'controlled', outcome:'Deceased' },
+        { id:'KOHSP-H-2026-008', reported:'04/02/2026', onset:'01/02/2026', type:'Human',   disease:'RVF',          ageSex:'38F', county:'Turkana', subcounty:'Lodwar Town',    classification:'Confirmed', status:'controlled', outcome:'Recovered' },
+        { id:'KOHSP-A-2026-048', reported:'04/02/2026', onset:'03/02/2026', type:'Animal',  disease:'Anthrax',       ageSex:'Cattle', county:'Kisumu', subcounty:'Muhoroni',     classification:'Suspected', status:'monitoring', outcome:'Under Investigation' },
+        { id:'KOHSP-H-2026-009', reported:'03/02/2026', onset:'31/01/2026', type:'Human',   disease:'Q Fever',       ageSex:'55M', county:'Isiolo',  subcounty:'Merti',          classification:'Confirmed', status:'controlled', outcome:'Recovered' },
+        { id:'KOHSP-W-2026-008', reported:'03/02/2026', onset:'02/02/2026', type:'Wildlife',disease:'RVF',          ageSex:'Buffalo', county:'Garissa', subcounty:'Lagdera',     classification:'Confirmed', status:'controlled', outcome:'5 Carcasses' },
+        { id:'KOHSP-H-2026-010', reported:'02/02/2026', onset:'29/01/2026', type:'Human',   disease:'Avian Influenza',ageSex:'44F', county:'Kisumu', subcounty:'Kisumu Central', classification:'Probable',  status:'monitoring', outcome:'Hospitalised' },
+        { id:'KOHSP-A-2026-049', reported:'02/02/2026', onset:'01/02/2026', type:'Animal',  disease:'Avian Influenza',ageSex:'Poultry', county:'Kisumu', subcounty:'Kisumu East', classification:'Confirmed', status:'active',    outcome:'Mass Culled' },
+        { id:'KOHSP-H-2026-011', reported:'01/02/2026', onset:'28/01/2026', type:'Human',   disease:'Brucellosis',   ageSex:'31M', county:'Nairobi', subcounty:'Kibra',          classification:'Confirmed', status:'controlled', outcome:'Treated' },
+        { id:'KOHSP-H-2026-012', reported:'01/02/2026', onset:'27/01/2026', type:'Human',   disease:'Trypanosomiasis',ageSex:'22M', county:'Marsabit', subcounty:'North Horr',   classification:'Confirmed', status:'controlled', outcome:'Recovered' },
+        { id:'KOHSP-A-2026-050', reported:'31/01/2026', onset:'29/01/2026', type:'Animal',  disease:'Rabies',        ageSex:'Dog', county:'Nairobi', subcounty:'Kasarani',       classification:'Confirmed', status:'controlled', outcome:'Euthanized' },
+        { id:'KOHSP-H-2026-013', reported:'30/01/2026', onset:'28/01/2026', type:'Human',   disease:'RVF',          ageSex:'47M', county:'Turkana', subcounty:'Kibish',         classification:'Confirmed', status:'active',     outcome:'ICU' },
+        { id:'KOHSP-A-2026-051', reported:'30/01/2026', onset:'29/01/2026', type:'Animal',  disease:'RVF',          ageSex:'Sheep', county:'Turkana', subcounty:'Lokichar',     classification:'Confirmed', status:'active',     outcome:'8 Dead' },
+        { id:'KOHSP-H-2026-014', reported:'29/01/2026', onset:'27/01/2026', type:'Human',   disease:'Leishmaniasis', ageSex:'13F', county:'Garissa', subcounty:'Fafi',           classification:'Confirmed', status:'controlled', outcome:'Treated' },
+        { id:'KOHSP-W-2026-009', reported:'28/01/2026', onset:'27/01/2026', type:'Wildlife',disease:'Anthrax',       ageSex:'Zebra', county:'Kajiado', subcounty:'Amboseli',     classification:'Confirmed', status:'controlled', outcome:'3 Carcasses' }
+    ];
+
+    let llFilter = 'all', llSearch = '';
+
+    // ── INIT ─────────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function() {
+        updateDate();
+        setInterval(updateDate, 60000);
+    });
+
+    function setRole(role) {
+        currentRole = role;
+        document.getElementById('roleModal').style.display = 'none';
+        document.getElementById('appContainer').style.display = 'flex';
+
+        configureForRole(role);
+        setTimeout(() => { initMap(); initCharts(); updateActiveFilters(); renderLineList(); }, 120);
+    }
+
+    function configureForRole(role) {
+        const wrap = document.getElementById('countySelectorWrap');
+        switch(role) {
+            case 'national':
+                document.getElementById('userName').textContent = 'Dr. J. Kimani';
+                document.getElementById('userRole').textContent = 'National ZDU Coordinator';
+                document.getElementById('pageTitle').textContent = 'National Command Center';
+                wrap.style.display = '';
+                document.getElementById('countySelector').value = 'national';
+                updateMetrics('national');
+                break;
+            case 'county':
+                document.getElementById('userName').textContent = 'Dr. P. Langat';
+                document.getElementById('userRole').textContent = 'Nakuru County COHU';
+                document.getElementById('pageTitle').textContent = 'Nakuru County Dashboard';
+                wrap.style.display = 'none';
+                currentCounty = 'nakuru';
+                updateMetrics('nakuru');
+                break;
+            case 'subcounty':
+                document.getElementById('userName').textContent = 'Officer M. Wanjiru';
+                document.getElementById('userRole').textContent = 'Njoro Sub-County Officer';
+                document.getElementById('pageTitle').textContent = 'Njoro Sub-County Operations';
+                wrap.style.display = 'none';
+                updateMetrics('subcounty');
+                break;
+        }
+    }
+
+    function updateMetrics(level) {
+        const d = diseaseData[currentDisease], m = monthlyData[currentMonth] || monthlyData.current;
+        let h, a, al;
+        if (level === 'national') { h = d.humanCases; a = d.animalCases; al = d.alerts; }
+        else if (countyData[level]) { h = countyData[level].humanCases; a = countyData[level].animalCases; al = countyData[level].alerts; }
+        else { h = 5; a = 12; al = 0; }
+        document.getElementById('humanCases').textContent = Math.round(h * m.multiplier);
+        document.getElementById('animalCases').textContent = Math.round(a * m.multiplier);
+        document.getElementById('activeAlerts').textContent = Math.max(1, Math.round(al * (m.multiplier > 3 ? 1.5 : 1)));
+    }
+
+    function updateDashboardByDisease(disease) {
+        currentDisease = disease;
+        updateMetrics(currentRole === 'national' ? 'national' : currentCounty);
+        updateActiveFilters(); updateCharts();
+    }
+    function updateDashboardByMonth(month) {
+        currentMonth = month;
+        updateMetrics(currentRole === 'national' ? 'national' : currentCounty);
+        updateActiveFilters(); updateCharts();
+    }
+    function changeCounty(county) {
+        if (county === 'national') { configureForRole('national'); }
+        else {
+            currentCounty = county;
+            const cd = countyData[county];
+            document.getElementById('pageTitle').textContent = cd.name + ' County Dashboard';
+            updateMetrics(county);
+            if (map) map.setView([cd.lat, cd.lng], 9);
+        }
+        updateActiveFilters();
+    }
+
+    function updateActiveFilters() {
+        const d = diseaseData[currentDisease], m = monthlyData[currentMonth] || monthlyData.current;
+        const badgeMap = {
+            red:'badge-red', yellow:'badge-yellow', gray:'badge-gray', blue:'badge-blue',
+            orange:'badge-orange', purple:'badge-purple', indigo:'badge-purple',
+            pink:'badge-red', teal:'badge-green', green:'badge-green'
+        };
+        const bc = badgeMap[d.color] || 'badge-gray';
+        const county = (currentRole==='national' && document.getElementById('countySelector')?.value==='national') ? 'All Counties' :
+                       (countyData[currentCounty]?.name + ' County') || 'All Counties';
+        document.getElementById('activeFilters').innerHTML = `
+            <span class="badge ${bc}">${d.name}</span>
+            <span class="badge badge-blue ml-1">${m.name} 2026</span>
+            <span class="badge badge-purple ml-1">${county}</span>
+        `;
+    }
+
+    function resetFilters() {
+        document.getElementById('diseaseSelector').value = 'all';
+        document.getElementById('monthSelector').value = 'current';
+        if (currentRole === 'national') document.getElementById('countySelector').value = 'national';
+        currentDisease = 'all'; currentMonth = 'current';
+        updateMetrics('national'); updateActiveFilters(); updateCharts();
+    }
+
+    // ── MAP ──────────────────────────────────────────────────────────────────
+    function initMap() {
+        const center = currentRole === 'national' ? [-0.3, 37.9] : [countyData[currentCounty]?.lat || -0.3, countyData[currentCounty]?.lng || 37.9];
+        const zoom = currentRole === 'national' ? 6 : 9;
+
+        map = L.map('map', { zoomControl: true }).setView(center, zoom);
+
+        // Dark tile layer
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://carto.com/">CARTO</a> · &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+            subdomains: 'abcd', maxZoom: 20
+        }).addTo(map);
+
+        const outbreakData = [
+            { county: countyData.turkana,  level: 'critical', disease: 'RVF',         humanCases: 12, animalCases: 45, deaths: 2,  team: 'Dispatched',   status: 'ACTIVE' },
+            { county: countyData.nairobi,  level: 'high',     disease: 'Rabies',       humanCases: 5,  animalCases: 12, deaths: 1,  team: 'Monitoring',   status: 'MONITORING' },
+            { county: countyData.nakuru,   level: 'medium',   disease: 'Anthrax',      humanCases: 1,  animalCases: 3,  deaths: 0,  team: 'Controlled',   status: 'CONTROLLED' },
+            { county: countyData.garissa,  level: 'high',     disease: 'RVF',          humanCases: 8,  animalCases: 20, deaths: 1,  team: 'En route',     status: 'ACTIVE' },
+            { county: countyData.kajiado,  level: 'medium',   disease: 'Brucellosis',  humanCases: 3,  animalCases: 15, deaths: 0,  team: 'PHO notified', status: 'MONITORING' },
+            { county: countyData.isiolo,   level: 'medium',   disease: 'CCHF',         humanCases: 2,  animalCases: 0,  deaths: 0,  team: 'Monitoring',   status: 'MONITORING' },
+            { county: countyData.kisumu,   level: 'high',     disease: 'Avian Influenza', humanCases: 1, animalCases: 500, deaths: 0, team: 'Vet team sent', status: 'ACTIVE' },
+            { county: countyData.mombasa,  level: 'medium',   disease: 'Rabies',       humanCases: 2,  animalCases: 4,  deaths: 1,  team: 'PHO notified', status: 'MONITORING' },
+            { county: countyData.marsabit, level: 'medium',   disease: 'Leishmaniasis',humanCases: 4,  animalCases: 0,  deaths: 0,  team: 'Monitoring',   status: 'MONITORING' }
+        ];
+
+        const colorMap = {
+            critical: { fill: '#f43f5e', pulse: 'rgba(244,63,94,0.4)', ring: '#ff6b87', size: 16 },
+            high:     { fill: '#fbbf24', pulse: 'rgba(251,191,36,0.4)', ring: '#fcd34d', size: 13 },
+            medium:   { fill: '#38bdf8', pulse: 'rgba(56,189,248,0.4)', ring: '#7dd3fc', size: 10 }
+        };
+
+        outbreakData.forEach(item => {
+            const { county, level, disease, humanCases, animalCases, deaths, team, status } = item;
+            const c = colorMap[level];
+
+            // Outer pulse ring
+            L.circleMarker([county.lat, county.lng], {
+                radius: c.size + 6,
+                fillColor: c.fill,
+                fillOpacity: 0.12,
+                color: c.ring,
+                weight: 1,
+                opacity: 0.5
+            }).addTo(map);
+
+            // Main circle
+            const marker = L.circleMarker([county.lat, county.lng], {
+                radius: c.size,
+                fillColor: c.fill,
+                fillOpacity: 0.85,
+                color: '#0d1320',
+                weight: 2,
+                opacity: 1
+            }).addTo(map);
+
+            const statusBadge = {
+                'ACTIVE':     `<span style="background:rgba(244,63,94,0.2);color:#fb7185;padding:2px 8px;border-radius:99px;font-size:10px;font-family:'JetBrains Mono';border:1px solid rgba(244,63,94,0.4)">● ACTIVE</span>`,
+                'MONITORING': `<span style="background:rgba(251,191,36,0.2);color:#fcd34d;padding:2px 8px;border-radius:99px;font-size:10px;font-family:'JetBrains Mono';border:1px solid rgba(251,191,36,0.4)">● MONITORING</span>`,
+                'CONTROLLED': `<span style="background:rgba(0,229,160,0.12);color:#00e5a0;padding:2px 8px;border-radius:99px;font-size:10px;font-family:'JetBrains Mono';border:1px solid rgba(0,229,160,0.25)">✓ CONTROLLED</span>`,
+            }[status] || '';
+
+            marker.bindPopup(`
+                <div style="font-family:'Sora',sans-serif; min-width:200px; padding:4px 0;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <strong style="color:#e8edf5;font-size:13px;">${county.name} County</strong>
+                        ${statusBadge}
+                    </div>
+                    <div style="color:#a0b0c8;font-size:12px;margin-bottom:2px;"><b style="color:#e8edf5;">Disease:</b> ${disease}</div>
+                    <div style="color:#a0b0c8;font-size:12px;margin-bottom:2px;"><b style="color:#e8edf5;">Human cases:</b> ${humanCases}</div>
+                    <div style="color:#a0b0c8;font-size:12px;margin-bottom:2px;"><b style="color:#e8edf5;">Animal cases:</b> ${animalCases}</div>
+                    <div style="color:#a0b0c8;font-size:12px;margin-bottom:2px;"><b style="color:#e8edf5;">Deaths:</b> ${deaths}</div>
+                    <div style="color:#a0b0c8;font-size:12px;margin-top:6px;padding-top:6px;border-top:1px solid #1e2d45;">
+                        <i style="color:#fbbf24;" class="fa fa-users"></i> <b style="color:#e8edf5;">Response:</b> ${team}
+                    </div>
+                </div>
+            `, { maxWidth: 260 });
+        });
+
+        // National approximate border box (Kenya bounding hint)
+        if (currentRole === 'national') {
+            setTimeout(() => { map.invalidateSize(); }, 200);
+        }
+    }
+
+    // ── CHARTS ───────────────────────────────────────────────────────────────
+    const chartDefaults = {
+        color: '#6b7fa0',
+        gridColor: 'rgba(30,45,69,0.8)',
+        tickColor: '#3d5070',
+        font: { family: "'JetBrains Mono', monospace", size: 11 }
+    };
+
+    function initCharts() { updateCharts(); }
+
+    function updateCharts() {
+        const disease = diseaseData[currentDisease];
+        const multiplier = (monthlyData[currentMonth] || monthlyData.current).multiplier;
+
+        if (epiChart) epiChart.destroy();
+        if (sectorChart) sectorChart.destroy();
+
+        // Epi Curve
+        const ctx1 = document.getElementById('epiCurveChart').getContext('2d');
+        let datasets = [];
+        const baseData = {
+            rvf:[2,4,8,12,15,12], rabies:[5,6,5,8,6,7], anthrax:[1,0,2,1,0,1],
+            brucellosis:[3,5,7,6,8,9], q_fever:[1,2,3,2,4,3], leishmaniasis:[4,5,6,7,5,6],
+            trypanosomiasis:[2,3,4,3,5,4], cchf:[1,1,2,3,2,1], influenza:[8,12,15,10,8,6]
+        };
+        const colorMap2 = {
+            rvf:'244,63,94', rabies:'251,191,36', anthrax:'107,127,160', brucellosis:'56,189,248',
+            q_fever:'251,146,60', leishmaniasis:'167,139,250', trypanosomiasis:'129,140,248',
+            cchf:'236,72,153', influenza:'20,184,166'
+        };
+        if (currentDisease === 'all') {
+            ['rvf','rabies','anthrax'].forEach(k => {
+                const rgb = colorMap2[k];
+                datasets.push({
+                    label: diseaseData[k].name,
+                    data: baseData[k].map(v => Math.round(v * multiplier)),
+                    backgroundColor: `rgba(${rgb},0.7)`,
+                    borderColor: `rgba(${rgb},1)`,
+                    borderWidth: 1, borderRadius: 3
+                });
+            });
+        } else {
+            const rgb = colorMap2[currentDisease] || '0,229,160';
+            datasets = [{ label: disease.name, data: (baseData[currentDisease]||[2,4,6,5,7,6]).map(v=>Math.round(v*multiplier)),
+                backgroundColor:`rgba(${rgb},0.7)`, borderColor:`rgba(${rgb},1)`, borderWidth:1, borderRadius:3 }];
+        }
+
+        epiChart = new Chart(ctx1, {
+            type: 'bar',
+            data: { labels: ['Wk 1','Wk 2','Wk 3','Wk 4','Wk 5','Wk 6'], datasets },
+            options: {
+                responsive: true,
+                plugins: { legend: { labels: { color: '#6b7fa0', font: chartDefaults.font } } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: chartDefaults.gridColor }, ticks: { color: chartDefaults.tickColor, font: chartDefaults.font }, title: { display: true, text: 'Cases', color: '#3d5070', font: { size: 11 } } },
+                    x: { grid: { color: 'transparent' }, ticks: { color: chartDefaults.tickColor, font: chartDefaults.font } }
+                }
+            }
+        });
+
+        // Sector Donut
+        const ctx2 = document.getElementById('sectorChart').getContext('2d');
+        sectorChart = new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+                labels: ['Human Health','Livestock','Wildlife','Environment'],
+                datasets: [{ data: [35,45,15,5].map(v=>Math.round(v*(multiplier>3?1:multiplier))),
+                    backgroundColor: ['rgba(56,189,248,0.8)','rgba(244,63,94,0.8)','rgba(0,229,160,0.8)','rgba(167,139,250,0.8)'],
+                    borderWidth: 2, borderColor: '#111827' }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'right', labels: { color: '#6b7fa0', font: chartDefaults.font, boxWidth: 12, padding: 16 } } },
+                cutout: '62%'
+            }
+        });
+    }
+
+    // ── LINE LIST ─────────────────────────────────────────────────────────────
+    function renderLineList() {
+        const filtered = lineListData.filter(r => {
+            const typeMatch = llFilter==='all' || r.type.toLowerCase()===llFilter || r.status===llFilter;
+            const searchMatch = !llSearch || r.id.toLowerCase().includes(llSearch) || r.county.toLowerCase().includes(llSearch) || r.disease.toLowerCase().includes(llSearch);
+            return typeMatch && searchMatch;
+        });
+
+        document.getElementById('ll-showing').textContent = filtered.length;
+        document.getElementById('ll-total-count').textContent = filtered.length;
+        document.getElementById('ll-total').textContent = filtered.length;
+        document.getElementById('ll-human').textContent = filtered.filter(r=>r.type==='Human').length;
+        document.getElementById('ll-animal').textContent = filtered.filter(r=>r.type==='Animal').length;
+
+        const diseaseBadge = { 'RVF':'badge-red', 'Rabies':'badge-yellow', 'Anthrax':'badge-gray', 'Brucellosis':'badge-blue', 'Q Fever':'badge-orange', 'Leishmaniasis':'badge-purple', 'Trypanosomiasis':'badge-purple', 'CCHF':'badge-red', 'Avian Influenza':'badge-green' };
+        const statusBadge  = { active:'badge-red', monitoring:'badge-yellow', controlled:'badge-green', closed:'badge-gray' };
+        const classBadge   = { Confirmed:'badge-green', Probable:'badge-yellow', Suspected:'badge-gray' };
+        const typeBadge    = { Human:'badge-blue', Animal:'badge-red', Wildlife:'badge-orange' };
+
+        document.getElementById('lineListBody').innerHTML = filtered.map((r, i) => `
+            <tr onclick="toggleLLRow(${i})" style="cursor:pointer;">
+                <td class="mono-cell" style="color: var(--accent-green);">${r.id}</td>
+                <td class="mono-cell">${r.reported}</td>
+                <td class="mono-cell">${r.onset}</td>
+                <td><span class="badge ${typeBadge[r.type]||'badge-gray'}">${r.type}</span></td>
+                <td><span class="badge ${diseaseBadge[r.disease]||'badge-gray'}">${r.disease}</span></td>
+                <td class="mono-cell">${r.ageSex}</td>
+                <td>${r.county}</td>
+                <td style="color: var(--text-muted);">${r.subcounty}</td>
+                <td><span class="badge ${classBadge[r.classification]||'badge-gray'}">${r.classification}</span></td>
+                <td><span class="flex items-center gap-1.5 text-xs"><span class="status-dot ${r.status}"></span>${r.status.charAt(0).toUpperCase()+r.status.slice(1)}</span></td>
+                <td style="color: var(--text-muted); font-size:12px;">${r.outcome}</td>
+                <td style="color: var(--text-dim); font-size:11px; text-align:right;"><i class="fas fa-chevron-down"></i></td>
+            </tr>
+            <tr id="ll-expand-${i}" style="display:none;" class="expand-row">
+                <td colspan="12">
+                    <div class="expand-content">
+                        <div class="grid grid-cols-4 gap-4 text-xs" style="color: var(--text-muted);">
+                            <div><span style="color:var(--text-dim);">Case ID</span><br><span class="mono" style="color:var(--accent-green);">${r.id}</span></div>
+                            <div><span style="color:var(--text-dim);">Disease</span><br><b style="color:var(--text-primary);">${r.disease}</b></div>
+                            <div><span style="color:var(--text-dim);">Location</span><br>${r.county} → ${r.subcounty}</div>
+                            <div><span style="color:var(--text-dim);">Outcome</span><br>${r.outcome}</div>
+                            <div><span style="color:var(--text-dim);">Classification</span><br>${r.classification}</div>
+                            <div><span style="color:var(--text-dim);">Age / Sex</span><br>${r.ageSex}</div>
+                            <div><span style="color:var(--text-dim);">Date Onset</span><br>${r.onset}</div>
+                            <div><span style="color:var(--text-dim);">Date Reported</span><br>${r.reported}</div>
+                        </div>
+                        <div class="flex gap-2 mt-4">
+                            <button class="btn-ghost text-xs px-3 py-1.5"><i class="fas fa-edit mr-1"></i>Edit</button>
+                            <button class="btn-ghost text-xs px-3 py-1.5"><i class="fas fa-vial mr-1"></i>Lab Request</button>
+                            <button class="btn-ghost text-xs px-3 py-1.5"><i class="fas fa-map-marker-alt mr-1"></i>Map</button>
+                            <button class="btn-primary text-xs px-3 py-1.5" style="padding: 6px 14px;"><i class="fas fa-check mr-1"></i>Close Case</button>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function toggleLLRow(i) {
+        const row = document.getElementById(`ll-expand-${i}`);
+        row.style.display = row.style.display === 'none' ? '' : 'none';
+    }
+
+    function filterLL(f, el) {
+        llFilter = f;
+        document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+        el.classList.add('active');
+        renderLineList();
+    }
+
+    function searchLL(val) { llSearch = val.toLowerCase(); renderLineList(); }
+
+    function exportLineList() { alert('Exporting line list as CSV…\n(In full implementation this would download kohsp_linelist.csv)'); }
+
+    // ── VIEWS ────────────────────────────────────────────────────────────────
+    function switchView(view, event) {
+        if (event) event.preventDefault();
+        document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+        if (event) event.target.closest('.sidebar-item').classList.add('active');
+
+        document.getElementById('view-dashboard').style.display = 'none';
+        document.getElementById('view-linelist').style.display  = 'none';
+
+        if (view === 'dashboard') document.getElementById('view-dashboard').style.display = '';
+        else if (view === 'linelist') { document.getElementById('view-linelist').style.display = ''; renderLineList(); }
+        else { alert('Switching to "' + view + '" module…\n(In full implementation this loads the separate module)'); document.getElementById('view-dashboard').style.display = ''; }
+    }
+
+    function updateDate() {
+        const now = new Date();
+        document.getElementById('currentDate').textContent = now.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    }
+
+    function openModal(type) {
+        if (type === 'newCase') document.getElementById('newCaseModal').style.display = 'flex';
+        else alert('Alert notification interface — send alert to county / national level');
+    }
+    function closeModal(type) {
+        if (type === 'newCase') document.getElementById('newCaseModal').style.display = 'none';
+    }
+    function submitCase(e) {
+        e.preventDefault();
+        alert('✓ Case submitted successfully!\nReference: KOHSP-H-2026-0' + (100 + Math.floor(Math.random() * 900)));
+        closeModal('newCase');
+    }
+    function showAlertDetail(type) {
+        const details = {
+            rvf: 'RVF Outbreak — Turkana Central\n\nHuman cases: 12  |  Deaths: 2\nAnimal deaths: 45 livestock\nStatus: Response team dispatched\nContact: Dr. A. Lokuruka (County Vet)',
+            rabies: 'Rabies Cluster — Nairobi East\n\nDog bites: 5  |  Deaths: 1\nAction: Mass vaccination scheduled\nPEP availability: Adequate'
+        };
+        alert(details[type] || 'Alert details…');
+    }
+    function showNotifications() {
+        alert('🔔 3 New Notifications:\n1. RVF outbreak alert (Turkana)\n2. Data quality issue (Kajiado)\n3. Weekly report reminder due Friday');
+    }
+</script>
+</body>
+</html>
